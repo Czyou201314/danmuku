@@ -325,31 +325,8 @@ export function convertToDanmakuJson(contents, platform) {
   log("info", `danmus_limit: ${convertedDanmus.length}`);
   log("info", "Top 5 danmus:", JSON.stringify(convertedDanmus.slice(0, 5), null, 2));
 
-  // ============================
-  // 【已内置】每10分钟一条反向滚动广告弹幕
-  // ============================
-  if (globals.enableReverseAdDanmu === true) {
-    const adIntervalSeconds = 10 * 60; // 10分钟 = 600秒
-    const adText = "弹幕数据由余影收集整理弹出–www.8688688.xyz";
-
-    const maxTime = convertedDanmus.reduce((max, d) => Math.max(max, d.t || 0), 0);
-    const adCount = Math.floor(maxTime / adIntervalSeconds) + 1;
-
-    for (let i = 1; i <= adCount; i++) {
-      const adTime = i * adIntervalSeconds;
-      const adP = `${adTime.toFixed(2)},6,25,16711680,[AD]`;
-
-      convertedDanmus.push({
-        cid: cidCounter++,
-        p: adP,
-        m: adText,
-        t: adTime
-      });
-    }
-
-    convertedDanmus.sort((a, b) => a.t - b.t);
-    log("info", `[AD Danmu] 已生成 ${adCount} 条反向广告弹幕`);
-  }
+  
+  
 
   return convertedDanmus;
 }

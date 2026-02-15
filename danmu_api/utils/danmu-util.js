@@ -1,104 +1,3 @@
-import { globals } from '../configs/globals.js';
-import { log } from './log-util.js'
-import { jsonResponse, xmlResponse } from "./http-util.js";
-
-// =====================
-// danmu处理相关函数
-// =====================
-
-export function groupDanmusByMinute(filteredDanmus, n) {
-  // 如果 n 为 0，直接返回原始数据
-  if (n === 0) {
-    return filteredDanmus.map(danmu => ({
-      ...danmu,
-      t: danmu.t !== undefined ? danmu.t : parseFloat(danmu.p.split(',')[0])
-    }));
-  }
-
-  // 按 n 分钟分组
-  const groupedByMinute = filteredDanmus.reduce((acc, danmu) => {
-    // 获取时间：优先使用 t 字段，如果没有则使用 p 的第一个值
-    const time = danmu.t !== undefined ? danmu.t : parseFloat(danmu.p.split(',')[0]);
-    // 计算分组（每 n 分钟一组，向下取整）
-    const group = Math.floor(time / (n * 60));
-
-    // 初始化分组
-    if (!acc[group]) {
-      acc[group] = [];
-    }
-
-    // 添加到对应分组
-    acc[group].push({ ...danmu, t: time });
-    return acc;
-  }, {});
-
-  // 处理每组的弹幕
-  const result = Object.keys(groupedByMinute).map(group => {
-    const danmus = groupedByMinute[group];
-
-    // 按消息内容分组
-    const groupedByMessage = danmus.reduce((acc, danmu) => {
-      const message = danmu.m.split(' X')[0]; // 提取原始消息（去除 Xn 后缀）
-      if (!acc[message]) {
-        acc[message] = {
-          count: 0,
-          earliestT: danmu.t,
-          cid: danmu.cid,
-          p: danmu.p
-        };
-      }
-      acc[message].count += 1;
-      // 更新最早时间
-      acc[message].earliestT = Math.min(acc[message].earliestT, danmu.t);
-      return acc;
-    }, {});
-
-    // 转换为结果格式
-    return Object.keys(groupedByMessage).map(message => {
-      const data = groupedByMessage[message];
-      return {
-        cid: data.cid,
-        p: data.p,
-        m: data.count > 1 ? `${message} x ${data.count}` : message,
-        t: data.earliestT
-      };
-    });
-  });
-
-  // 展平结果并按时间排序
-  return result.flat().sort((a, b) => a.t - b.t);
-}
-
-
-export function limitDanmusByCount(filteredDanmus, danmuLimit) {
-  // 如果 danmuLimit 为 0，直接返回原始数据
-  if (danmuLimit === 0) {
-    return filteredDanmus;
-  }
-
-  // 计算目标弹幕数量
-  const targetCount = danmuLimit * 1000;
-  const totalCount = filteredDanmus.length;
-
-  // 如果当前弹幕数不超过目标数量，直接返回
-  if (totalCount <= targetCount) {
-    return filteredDanmus;
-  }
-
-  // 计算采样间隔
-  const interval = totalCount / targetCount;
-
-  // 按间隔抽取弹幕
-  const result = [];
-  for (let i = 0; i < targetCount; i++) {
-    // 计算当前应该取的索引位置
-    const index = Math.floor(i * interval);
-    result.push(filteredDanmus[index]);
-  }
-
-  return result;
-}
-
 export function convertToDanmakuJson(contents, platform) {
   let danmus = [];
   let cidCounter = 1;
@@ -275,159 +174,55 @@ export function convertToDanmakuJson(contents, platform) {
   // 输出前五条弹幕
   log("info", "Top 5 danmus:", JSON.stringify(convertedDanmus.slice(0, 5), null, 2));
 
-  // ========== 新增：每十分钟插入反向滚动广告弹幕 ==========
-  if (convertedDanmus.length > 0) {
-    // 获取现有弹幕的最大时间点（秒）
-    const maxTime = Math.max(...convertedDanmus.map(d => d.t), 0);
-    // 获取现有最大 cid
-    const maxCid = Math.max(...convertedDanmus.map(d => d.cid), 0);
-    let adCid = maxCid + 1;
+  // ========== 修复后的广告插入逻辑（保证任何情况下都能运行） ==========
+  // 确保 convertedDanmus 是数组
+  if (!Array.isArray(convertedDanmus)) {
+    convertedDanmus = [];
+  }
 
-    const adMode = 6; // 6 = 反向滚动
-    const adColor = 16711680; // 红色
-    const adContent = "弹幕内容由余影科技收集整理弹出–www.8688688.xyz";
-    const platformTag = `[${platform}]`;
+  // 提取有效时间点和 cid（过滤掉没有 t 或 t 非数字的项）
+  const validTimes = convertedDanmus.filter(d => d && typeof d.t === 'number').map(d => d.t);
+  const validCids = convertedDanmus.filter(d => d && typeof d.cid === 'number').map(d => d.cid);
 
-    // 从 0 秒开始，每隔 600 秒（10分钟）插入一条，直到 maxTime
-    for (let time = 0; time <= maxTime; time += 600) {
-      const p = `${time.toFixed(2)},${adMode},${adColor},${platformTag}`;
-      const adDanmu = {
-        cid: adCid++,
-        p: p,
-        m: adContent,
-        t: time
-      };
-      convertedDanmus.push(adDanmu);
-    }
+  const maxTime = validTimes.length > 0 ? Math.max(...validTimes) : 0;
+  const maxCid = validCids.length > 0 ? Math.max(...validCids) : 0;
 
-    // 重新按时间排序
-    convertedDanmus.sort((a, b) => a.t - b.t);
-  } else {
-    // 如果没有原始弹幕，也至少插入一条时间为 0 的广告
-    const adCid = 1; // 因为没有弹幕，从 1 开始
-    const adMode = 6;
-    const adColor = 16711680;
-    const adContent = "弹幕内容由余影科技收集整理弹出–www.8688688.xyz";
-    const platformTag = `[${platform}]`;
-    const p = `0.00,${adMode},${adColor},${platformTag}`;
-    convertedDanmus.push({
-      cid: adCid,
+  const adMode = 6; // 反向滚动
+  const adColor = 16711680; // 红色
+  const adContent = "弹幕内容由余影科技收集整理弹出–www.8688688.xyz";
+  const platformTag = `[${platform}]`;
+
+  // 生成广告弹幕列表
+  const adDanmus = [];
+  let adCid = maxCid + 1;
+
+  // 从0秒开始，每隔600秒插入一条，直到 maxTime
+  for (let time = 0; time <= maxTime; time += 600) {
+    const p = `${time.toFixed(2)},${adMode},${adColor},${platformTag}`;
+    adDanmus.push({
+      cid: adCid++,
       p: p,
+      m: adContent,
+      t: time
+    });
+  }
+
+  // 如果原始弹幕为空，至少保留一条广告
+  if (adDanmus.length === 0) {
+    adDanmus.push({
+      cid: 1,
+      p: `0.00,${adMode},${adColor},${platformTag}`,
       m: adContent,
       t: 0
     });
   }
+
+  // 合并广告和原始弹幕
+  convertedDanmus = [...convertedDanmus, ...adDanmus];
+
+  // 按时间排序
+  convertedDanmus.sort((a, b) => a.t - b.t);
   // ========== 广告插入结束 ==========
 
   return convertedDanmus;
-}
-
-// RGB 转整数的函数
-export function rgbToInt(color) {
-  // 检查 RGB 值是否有效
-  if (
-    typeof color.r !== 'number' || color.r < 0 || color.r > 255 ||
-    typeof color.g !== 'number' || color.g < 0 || color.g > 255 ||
-    typeof color.b !== 'number' || color.b < 0 || color.b > 255
-  ) {
-    return -1;
-  }
-  return color.r * 256 * 256 + color.g * 256 + color.b;
-}
-
-// 将弹幕 JSON 数据转换为 XML 格式（Bilibili 标准格式）
-export function convertDanmuToXml(danmuData) {
-  let xml = '<?xml version="1.0" ?>\n';
-  xml += '<i>\n';
-
-  // 添加弹幕数据
-  const comments = danmuData.comments || [];
-  if (Array.isArray(comments)) {
-    for (const comment of comments) {
-      // 解析原有的 p 属性，转换为 Bilibili 格式
-      const pValue = buildBilibiliDanmuP(comment);
-      xml += '    <d p="' + escapeXmlAttr(pValue) + '">' + escapeXmlText(comment.m) + '</d>\n';
-    }
-  }
-
-  xml += '</i>';
-  return xml;
-}
-
-// 生成弹幕ID（11位数字）
-function generateDanmuId() {
-  // 生成11位数字ID
-  // 格式: 时间戳后8位 + 随机3位
-  const timestamp = Date.now();
-  const lastEightDigits = (timestamp % 100000000).toString().padStart(8, '0');
-  const randomThreeDigits = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
-  return lastEightDigits + randomThreeDigits;
-}
-
-// 构建 Bilibili 格式的 p 属性值（8个字段）
-function buildBilibiliDanmuP(comment) {
-  // Bilibili 格式: 时间,类型,字体,颜色,时间戳,弹幕池,用户Hash,弹幕ID
-  // 示例: 5.0,5,25,16488046,1751533608,0,0,13190629936
-
-  const pValues = comment.p.split(',');
-  const timeNum = parseFloat(pValues[0]) || 0;
-  const time = timeNum.toFixed(1); // 时间（秒，保留1位小数）
-  const mode = pValues[1] || '1'; // 类型（1=滚动, 4=底部, 5=顶部, 6=逆向滚动）
-
-  // 字体大小固定为 25（恢复原始设置）
-  const fontSize = '25';
-
-  // 颜色字段（输入总是4字段格式：时间,类型,颜色,平台）
-  const color = pValues[2] || '16777215'; // 默认白色
-
-  // 使用固定值以符合标准格式
-  const timestamp = '1751533608'; // 固定时间戳
-  const pool = '0'; // 弹幕池（固定为0）
-  const userHash = '0'; // 用户Hash（固定为0）
-  const danmuId = generateDanmuId(); // 弹幕ID（11位数字）
-
-  return `${time},${mode},${fontSize},${color},${timestamp},${pool},${userHash},${danmuId}`;
-}
-
-// 转义 XML 属性值
-function escapeXmlAttr(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-// 转义 XML 文本内容
-function escapeXmlText(str) {
-  if (!str) return '';
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
-}
-
-// 根据格式参数返回弹幕数据（JSON 或 XML）
-export function formatDanmuResponse(danmuData, queryFormat) {
-  // 确定最终使用的格式：查询参数 > 环境变量 > 默认值
-  let format = queryFormat || globals.danmuOutputFormat;
-  format = format.toLowerCase();
-
-  log("info", `[Format] Using format: ${format}`);
-
-  if (format === 'xml') {
-    try {
-      const xmlData = convertDanmuToXml(danmuData);
-      return xmlResponse(xmlData);
-    } catch (error) {
-      log("error", `Failed to convert to XML: ${error.message}`);
-      // 转换失败时回退到 JSON
-      return jsonResponse(danmuData);
-    }
-  }
-
-  // 默认返回 JSON
-  return jsonResponse(danmuData);
 }

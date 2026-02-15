@@ -275,19 +275,18 @@ export function convertToDanmakuJson(contents, platform) {
         color = 16777215;
         modified = true;
       }
-      // 2.2 将白色弹幕转换为随机颜色，白、红、橙、黄、绿、青、蓝、紫、粉（模拟真实情况，增加白色出现概率）
+      // 2.2 将白色弹幕转换为随机颜色，白、红、橙、黄、绿、青、蓝、紫、粉（亮色鲜艳版）
       let colors = [
-  16777215,    // 白色（仅1个）
-  16744448,    // 亮红
-  16776960,    // 亮金
-  65280,       // 亮绿
-  8912895,     // 亮紫
-  8943673,     // 亮粉
-  16746496,    // 亮橙
-  35723,       // 亮青
-  25555        // 亮蓝
-];
-
+        16777215,    // 白色（仅1个）
+        16744448,    // 亮红
+        16776960,    // 亮金
+        65280,       // 亮绿
+        12582912,    // 亮紫
+        16727327,    // 亮粉
+        16746496,    // 亮橙
+        35723,       // 亮青
+        25555        // 亮蓝
+      ];
       let randomColor = colors[Math.floor(Math.random() * colors.length)];
       if (globals.convertColor === 'color' && color === 16777215) {
         colorCount++;
@@ -324,8 +323,34 @@ export function convertToDanmakuJson(contents, platform) {
   log("info", `danmus_filter: ${filteredDanmus.length}`);
   log("info", `danmus_group: ${groupedDanmus.length}`);
   log("info", `danmus_limit: ${convertedDanmus.length}`);
-  // 输出前五条弹幕
   log("info", "Top 5 danmus:", JSON.stringify(convertedDanmus.slice(0, 5), null, 2));
+
+  // ============================
+  // 【已内置】每10分钟一条反向滚动广告弹幕
+  // ============================
+  if (globals.enableReverseAdDanmu === true) {
+    const adIntervalSeconds = 10 * 60; // 10分钟 = 600秒
+    const adText = "弹幕数据由余影收集整理弹出–www.8688688.xyz";
+
+    const maxTime = convertedDanmus.reduce((max, d) => Math.max(max, d.t || 0), 0);
+    const adCount = Math.floor(maxTime / adIntervalSeconds) + 1;
+
+    for (let i = 1; i <= adCount; i++) {
+      const adTime = i * adIntervalSeconds;
+      const adP = `${adTime.toFixed(2)},6,25,16711680,[AD]`;
+
+      convertedDanmus.push({
+        cid: cidCounter++,
+        p: adP,
+        m: adText,
+        t: adTime
+      });
+    }
+
+    convertedDanmus.sort((a, b) => a.t - b.t);
+    log("info", `[AD Danmu] 已生成 ${adCount} 条反向广告弹幕`);
+  }
+
   return convertedDanmus;
 }
 
@@ -389,7 +414,7 @@ function buildBilibiliDanmuP(comment) {
   const timeNum = parseFloat(pValues[0]) || 0;
   const time = timeNum.toFixed(1); // 时间（秒，保留1位小数）
   const mode = pValues[1] || '1'; // 类型（1=滚动, 4=底部, 5=顶部）
-const fontSize = String(Math.floor(Math.random() * (28 - 18 + 1)) + 18); // 随机字体大小16-28
+  const fontSize = String(Math.floor(Math.random() * (28 - 18 + 1)) + 18); // 随机字体大小16-28
 
   // 颜色字段（输入总是4字段格式：时间,类型,颜色,平台）
   const color = pValues[2] || '16777215'; // 默认白色

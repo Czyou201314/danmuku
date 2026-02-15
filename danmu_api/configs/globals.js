@@ -5,6 +5,7 @@ import { Envs } from './envs.js';
  * 集中管理项目中的静态常量和运行时共享变量
  * ⚠️不是持久化存储，每次冷启动会丢失
  */
+enableReverseAdDanmu: true,
 export const Globals = {
   // 缓存环境变量
   env: {},

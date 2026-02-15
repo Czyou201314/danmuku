@@ -279,7 +279,7 @@ export function convertToDanmakuJson(contents, platform) {
       let colors = [16777215, 16777215, 16777215, 16777215, 16777215, 16777215, 16777215, 16777215, 
                     16744319, 16752762, 16774799, 9498256, 8388564, 8900346, 14204888, 16758465];
       let randomColor = colors[Math.floor(Math.random() * colors.length)];
-      if (globals.convertColor === 'color' && color === 16777215 && color !== randomColor) {
+      if (globals.convertColor === 'color' && color === 16777215) {
         colorCount++;
         color = randomColor;
         modified = true;
@@ -379,7 +379,7 @@ function buildBilibiliDanmuP(comment) {
   const timeNum = parseFloat(pValues[0]) || 0;
   const time = timeNum.toFixed(1); // 时间（秒，保留1位小数）
   const mode = pValues[1] || '1'; // 类型（1=滚动, 4=底部, 5=顶部）
-const fontSize = String(Math.floor(Math.random() * (28 - 16 + 1)) + 16); // 随机字体大小16-28
+const fontSize = String(Math.floor(Math.random() * (28 - 18 + 1)) + 18); // 随机字体大小16-28
 
   // 颜色字段（输入总是4字段格式：时间,类型,颜色,平台）
   const color = pValues[2] || '16777215'; // 默认白色

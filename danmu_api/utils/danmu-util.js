@@ -268,44 +268,57 @@ export function convertToDanmakuJson(contents, platform) {
     }
   }
 
-  // 插入每十分钟反向滚动广告弹幕
-  if (convertedDanmus.length > 0) {
-    // 获取最大时间
-    const maxTime = Math.max(...convertedDanmus.map(d => d.t), 0);
-    // 获取当前最大 cid
-    const maxCid = Math.max(...convertedDanmus.map(d => d.cid), 0);
-    let adCid = maxCid + 1;
-
-    const adMode = 6; // 反向滚动
-    const adFontSize = 25; // 固定25
-    const adColor = 16711680; // 红色 #FF0000
-    const adContent = "弹幕内容由余影科技收集整理弹出–www.8688688.xyz";
-    const platformTag = `[${platform}]`;
-
-    // 从0秒开始，每600秒插入一条，直到 maxTime
-    for (let time = 0; time <= maxTime; time += 600) {
-      // 构造 p 属性：时间,模式,颜色,平台
-      const p = `${time.toFixed(2)},${adMode},${adColor},${platformTag}`;
-      const adDanmu = {
-        cid: adCid++,
-        p: p,
-        m: adContent,
-        t: time,
-        isAd: true // 标记为广告弹幕，用于后续字体大小处理
-      };
-      convertedDanmus.push(adDanmu);
-    }
-
-    // 重新按时间排序
-    convertedDanmus.sort((a, b) => a.t - b.t);
-  }
-
   log("info", `danmus_original: ${danmus.length}`);
   log("info", `danmus_filter: ${filteredDanmus.length}`);
   log("info", `danmus_group: ${groupedDanmus.length}`);
   log("info", `danmus_limit: ${convertedDanmus.length}`);
   // 输出前五条弹幕
   log("info", "Top 5 danmus:", JSON.stringify(convertedDanmus.slice(0, 5), null, 2));
+
+  // ========== 新增：每十分钟插入反向滚动广告弹幕 ==========
+  if (convertedDanmus.length > 0) {
+    // 获取现有弹幕的最大时间点（秒）
+    const maxTime = Math.max(...convertedDanmus.map(d => d.t), 0);
+    // 获取现有最大 cid
+    const maxCid = Math.max(...convertedDanmus.map(d => d.cid), 0);
+    let adCid = maxCid + 1;
+
+    const adMode = 6; // 6 = 反向滚动
+    const adColor = 16711680; // 红色
+    const adContent = "弹幕内容由余影科技收集整理弹出–www.8688688.xyz";
+    const platformTag = `[${platform}]`;
+
+    // 从 0 秒开始，每隔 600 秒（10分钟）插入一条，直到 maxTime
+    for (let time = 0; time <= maxTime; time += 600) {
+      const p = `${time.toFixed(2)},${adMode},${adColor},${platformTag}`;
+      const adDanmu = {
+        cid: adCid++,
+        p: p,
+        m: adContent,
+        t: time
+      };
+      convertedDanmus.push(adDanmu);
+    }
+
+    // 重新按时间排序
+    convertedDanmus.sort((a, b) => a.t - b.t);
+  } else {
+    // 如果没有原始弹幕，也至少插入一条时间为 0 的广告
+    const adCid = 1; // 因为没有弹幕，从 1 开始
+    const adMode = 6;
+    const adColor = 16711680;
+    const adContent = "弹幕内容由余影科技收集整理弹出–www.8688688.xyz";
+    const platformTag = `[${platform}]`;
+    const p = `0.00,${adMode},${adColor},${platformTag}`;
+    convertedDanmus.push({
+      cid: adCid,
+      p: p,
+      m: adContent,
+      t: 0
+    });
+  }
+  // ========== 广告插入结束 ==========
+
   return convertedDanmus;
 }
 
@@ -361,13 +374,8 @@ function buildBilibiliDanmuP(comment) {
   const time = timeNum.toFixed(1); // 时间（秒，保留1位小数）
   const mode = pValues[1] || '1'; // 类型（1=滚动, 4=底部, 5=顶部, 6=逆向滚动）
 
-  // 字体大小：广告弹幕固定25，其他随机18-28
-  let fontSize;
-  if (comment.isAd) {
-    fontSize = '25';
-  } else {
-    fontSize = String(Math.floor(Math.random() * (28 - 18 + 1)) + 18); // 随机18-28
-  }
+  // 字体大小固定为 25（恢复原始设置）
+  const fontSize = '25';
 
   // 颜色字段（输入总是4字段格式：时间,类型,颜色,平台）
   const color = pValues[2] || '16777215'; // 默认白色

@@ -331,10 +331,9 @@ export function convertToDanmakuJson(contents, platform) {
   log("info", `danmus_limit: ${convertedDanmus.length}`);
   log("info", "Top 5 danmus:", JSON.stringify(convertedDanmus.slice(0, 5), null, 2));
 // ============================
-// 【安全不报错版】反向广告弹幕
 // ============================
 if (globals.enableReverseAdDanmu) {
-  const adInterval = 600; // 10分钟
+  const adInterval = 600; // 每隔 600 秒一条
   const adText = "弹幕数据由余影收集整理弹出–www.8688688.xyz";
 
   const maxTime = convertedDanmus.reduce((m, d) => Math.max(m, d.t || 0), 0);
@@ -346,18 +345,17 @@ if (globals.enableReverseAdDanmu) {
       p: `${t.toFixed(2)},6,25,16711680,[AD]`,
       m: adText,
       t: t,
-      cid: -i
+      cid: -i,
+      size: 25,        // 直接在这里定义，不后补
+      color: 16744448  // 亮红色
     });
   }
-// 你原来的逻辑（只加了字号和颜色）
- convertedDanmus = [...convertedDanmus, ...adList].sort((a, b) => a.t - b.t);
- log("info", `[AD] 生成 ${adList.length} 条反向广告弹幕`);
- // 给广告弹幕统一设置：字号25 + 亮红色
- adList.forEach(item => {
-   item.size = 25;       // 字体大小25
-   item.color = 16744448; // 亮红色（你原来的色值）
- });
- // 扩充后的鲜艳颜色数组（加了更多亮紫、亮粉、玫红、霓虹色）
+
+  // 合并并按时间排序
+  convertedDanmus = [...convertedDanmus, ...adList].sort((a, b) => a.t - b.t);
+  log("info", `[AD] 生成 ${adList.length} 条广告弹幕`);
+}
+// ============================
   
   
 

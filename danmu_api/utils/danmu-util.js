@@ -277,15 +277,21 @@ export function convertToDanmakuJson(contents, platform) {
       }
       // 2.2 将白色弹幕转换为随机颜色，白、红、橙、黄、绿、青、蓝、紫、粉（亮色鲜艳版）
       let colors = [
-        16777215,    // 白色（仅1个）
-        16744448,    // 亮红
-        16776960,    // 亮金
-        65280,       // 亮绿
-        12582912,    // 亮紫
-        16727327,    // 亮粉
-        16746496,    // 亮橙
-        35723,       // 亮青
-        25555        // 亮蓝
+16777215,    // 白色（仅1个）
+   16744448,    // 亮红
+   16776960,    // 亮金
+   65280,       // 亮绿
+   12582912,    // 亮紫
+   16727327,    // 亮粉
+   16746496,    // 亮橙
+   35723,       // 亮青
+   25555,       // 亮蓝
+   15632676,    // 浅紫
+   16717055,    // 玫红
+   13369594,    // 紫罗兰
+   16728384,    // 樱花粉
+   9671839,     // 深紫
+   13421823     // 霓虹粉
       ];
       let randomColor = colors[Math.floor(Math.random() * colors.length)];
       if (globals.convertColor === 'color' && color === 16777215) {
@@ -343,10 +349,15 @@ if (globals.enableReverseAdDanmu) {
       cid: -i
     });
   }
-
-  convertedDanmus = [...convertedDanmus, ...adList].sort((a, b) => a.t - b.t);
-  log("info", `[AD] 生成 ${adList.length} 条反向广告弹幕`);
-}
+// 你原来的逻辑（只加了字号和颜色）
+ convertedDanmus = [...convertedDanmus, ...adList].sort((a, b) => a.t - b.t);
+ log("info", `[AD] 生成 ${adList.length} 条反向广告弹幕`);
+ // 给广告弹幕统一设置：字号25 + 亮红色
+ adList.forEach(item => {
+   item.size = 25;       // 字体大小25
+   item.color = 16744448; // 亮红色（你原来的色值）
+ });
+ // 扩充后的鲜艳颜色数组（加了更多亮紫、亮粉、玫红、霓虹色）
   
   
 

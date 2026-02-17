@@ -347,7 +347,7 @@ if (globals.enableReverseAdDanmu) {
       t: t,
       cid: -i,
       size: 25,        // 直接在这里定义，不后补
-      color: 16744448  // 亮红色
+      color:16711680
     });
   }
 
@@ -431,8 +431,16 @@ function buildBilibiliDanmuP(comment) {
   const timestamp = '1751533608'; // 固定时间戳
   const pool = '0'; // 弹幕池（固定为0）
   const userHash = '0'; // 用户Hash（固定为0）
-  const danmuId = generateDanmuId(); // 弹幕ID（11位数字）
-
+    // 尽量短的弹幕ID：优先使用 comment.cid（自增整数）
+  let danmuId;
+  if (comment.cid !== undefined && comment.cid !== null) {
+    danmuId = String(comment.cid);              // 直接使用 cid，长度最短
+  } else {
+    // 回退方案：8位数字（时间戳后6位 + 随机2位），比原11位短
+    const timestampPart = (Date.now() % 1000000).toString().padStart(6, '0');
+    const randomPart = Math.floor(Math.random() * 100).toString().padStart(2, '0');
+    danmuId = timestampPart + randomPart;       // 8位
+  }
   return `${time},${mode},${fontSize},${color},${timestamp},${pool},${userHash},${danmuId}`;
 }
 

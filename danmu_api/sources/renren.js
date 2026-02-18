@@ -12,46 +12,29 @@ import { SegmentListResponse } from '../models/dandan-model.js';
 // 获取人人视频弹幕
 // =====================
 
-// 模块级状态管理 (Instance Level State)
-// 缓存当前的 AliID (全局共享，跨请求持久化，模拟设备指纹)
+// 模块级状态管理
 let CACHED_ALI_ID = null;
-// 当前 AliID 已请求次数
 let REQUEST_COUNT = 0;
-// 触发轮换的阈值 (将在 30-60 之间随机生成)
 let ROTATION_THRESHOLD = 0;
 
-/**
- * 人人视频弹幕源
- * 集成 TV 端 API 协议，保留网页版接口作为降级容灾策略。
- * 兼容处理 SeriesId-EpisodeId 复合主键，确保弹幕与剧集详情的关联正确性。
- */
 export default class RenrenSource extends BaseSource {
   constructor() {
     super();
-    // 实例级标记：当前是否处于批量请求模式
     this.isBatchMode = false;
   }
 
-  // API 配置常量
   API_CONFIG = {
     SECRET_KEY: "cf65GPholnICgyw1xbrpA79XVkizOdMq",
-    
-    // TV 端接口配置
     TV_HOST: "api.gorafie.com",
     TV_DANMU_HOST: "static-dm.qwdjapp.com",
     TV_VERSION: "1.2.2",
     TV_USER_AGENT: 'okhttp/3.12.13',
     TV_CLIENT_TYPE: 'android_qwtv_RRSP',
     TV_PKT: 'rrmj',
-
-    // 网页版/旧版接口配置 (降级备用)
     WEB_HOST: "api.rrmj.plus",
     WEB_DANMU_HOST: "static-dm.rrmj.plus"
   };
 
-  /**
-   * 生成随机的 aliid
-   */
   generateRandomAliId() {
     const prefix = "aY";
     const length = 24 - prefix.length;
@@ -63,9 +46,6 @@ export default class RenrenSource extends BaseSource {
     return result;
   }
 
-  /**
-   * 执行 ID 轮换/初始化
-   */
   rotateAliId() {
     const oldId = CACHED_ALI_ID;
     CACHED_ALI_ID = this.generateRandomAliId();
@@ -80,9 +60,6 @@ export default class RenrenSource extends BaseSource {
     log("info", `[Renren] AliID 下次轮换将在 ${ROTATION_THRESHOLD} 次操作后触发`);
   }
 
-  /**
-   * 检查并增加计数
-   */
   checkAndIncrementUsage() {
     if (!CACHED_ALI_ID) {
       this.rotateAliId();
@@ -97,9 +74,6 @@ export default class RenrenSource extends BaseSource {
     log("info", `[Renren] AliID 计数增加: ${REQUEST_COUNT}/${ROTATION_THRESHOLD} (当前ID: ...${CACHED_ALI_ID.slice(-6)})`);
   }
 
-  /**
-   * 获取有效的 aliid
-   */
   getAliId() {
     if (!CACHED_ALI_ID) {
       this.rotateAliId();
@@ -113,9 +87,6 @@ export default class RenrenSource extends BaseSource {
     return CACHED_ALI_ID;
   }
 
-  /**
-   * 生成 TV 端接口所需的请求头
-   */
   generateTvHeaders(timestamp, sign) {
     const aliId = this.getAliId();
 
@@ -137,9 +108,6 @@ export default class RenrenSource extends BaseSource {
     };
   }
 
-  /**
-   * 搜索剧集 (TV API)
-   */
   async searchAppContent(keyword, size = 30) {
     try {
       const timestamp = Date.now();
@@ -189,9 +157,6 @@ export default class RenrenSource extends BaseSource {
     }
   }
 
-  /**
-   * 获取剧集详情 (TV API)
-   */
   async getAppDramaDetail(dramaId, episodeSid = "") {
     try {
       const timestamp = Date.now();
@@ -226,7 +191,7 @@ export default class RenrenSource extends BaseSource {
       const msg = resData.msg || resData.message || "";
 
       if (msg.includes("该剧暂不可播")) {
-          log("info", `[Renren] TV接口提示'该剧暂不可播' (ID=${dramaId})，视为维护中，触发Web降级`);
+          log("info", `[Renren] TV接口提示'该剧暂不可播' (ID=${dramaId})，触发Web降级`);
           return null;
       }
 
@@ -248,9 +213,6 @@ export default class RenrenSource extends BaseSource {
     }
   }
 
-  /**
-   * 获取单集弹幕 (TV API)
-   */
   async getAppDanmu(episodeSid) {
     try {
       const timestamp = Date.now();
@@ -280,7 +242,6 @@ export default class RenrenSource extends BaseSource {
       if (Array.isArray(data)) danmuList = data;
       else if (data && data.data && Array.isArray(data.data)) danmuList = data.data;
 
-      // 过滤掉 null 或无效元素
       return danmuList.filter(item => item != null);
     } catch (error) {
       log("info", "[Renren] getAppDanmu error:", error.message);
@@ -288,9 +249,6 @@ export default class RenrenSource extends BaseSource {
     }
   }
 
-  /**
-   * 获取网页版弹幕 (降级方法)
-   */
   async getWebDanmuFallback(id) {
     let realEpisodeId = id;
     if (String(id).includes("-")) {
@@ -329,9 +287,6 @@ export default class RenrenSource extends BaseSource {
     }
   }
 
-  /**
-   * 执行网页版网络搜索 (降级逻辑)
-   */
   async performNetworkSearch(keyword, { lockRef = null, lastRequestTimeRef = { value: 0 }, minInterval = 500 } = {}) {
     try {
       log("info", `[Renren] 尝试执行网页版搜索: ${keyword}`);
@@ -577,56 +532,51 @@ export default class RenrenSource extends BaseSource {
   // 数据解析与签名工具
   // =====================
 
-  parseRRSPPFields(pField) {
-    const parts = String(pField).split(",");
-    
-    const safeNum = (val, parser, defaultVal) => {
-        if (val === undefined || val === null || val === "") return defaultVal;
-        const res = parser(val);
-        return isNaN(res) ? defaultVal : res;
-    };
-    
-    const timestamp = safeNum(parts[0], parseFloat, 0); 
-    const mode = safeNum(parts[1], x => parseInt(x, 10), 1);
-    const size = safeNum(parts[2], x => parseInt(x, 10), 25);
-    const color = safeNum(parts[3], x => parseInt(x, 10), 16777215); 
-    
-    const userId = parts[6] || "";
-    const contentId = parts[7] || `${timestamp}:${userId}`;
-    
-    return { timestamp, mode, size, color, userId, contentId };
-  }
-
   /**
    * 格式化弹幕列表为标准模型
-   * 增强健壮性：确保输入为数组，过滤无效元素，避免空指针
+   * 强制构建至少9字段的标准p字符串（8标准字段+来源标签），确保客户端解析不会越界
    */
   formatComments(comments) {
-    // 确保输入是数组，否则返回空数组
     if (!Array.isArray(comments)) return [];
 
     return comments
-      // 第一步：移除数组中的 null 和 undefined
       .filter(item => item != null)
       .map(item => {
-        // 提取弹幕内容（优先使用 d 字段，兼容 content）
         const text = String(item.d || item.content || '');
-        if (!text) return null; // 无内容则丢弃
-
-        // 必须有 p 属性才能解析
+        if (!text) return null;
         if (!item.p) return null;
 
-        // 解析 p 字段
-        const meta = this.parseRRSPPFields(item.p);
-        // 构造标准弹幕对象
+        // 解析原始p字段
+        const parts = String(item.p).split(',');
+        
+        // 确保至少有8个字段，缺失补默认值
+        const timestamp = parseFloat(parts[0]) || 0;          // 时间（秒）
+        const mode = parseInt(parts[1]) || 1;                 // 弹幕类型（1=滚动，4=底部，5=顶部）
+        const fontSize = parseInt(parts[2]) || 25;            // 字体大小（默认25）
+        const color = parseInt(parts[3]) || 16777215;         // 颜色（默认白色）
+        
+        // 后续字段（用于弹幕ID生成，不影响显示）
+        const fallbackTs = Math.floor(Date.now() / 1000);     // 当前时间戳作为备用
+        const tsField = parts[4] || fallbackTs;               // 弹幕时间戳
+        const pool = parts[5] || '0';                          // 弹幕池（0普通）
+        const userHash = parts[6] || '0';                      // 用户Hash
+        
+        // 弹幕ID：优先使用原始第7个字段，若不存在则生成一个唯一ID
+        let danmuId = parts[7];
+        if (!danmuId) {
+          danmuId = `${fallbackTs}${Math.floor(Math.random() * 10000)}`;
+        }
+
+        // 构建标准8字段p字符串，并追加来源标签 [renren]（作为第9字段，符合Bilibili扩展格式）
+        const standardP = `${timestamp.toFixed(2)},${mode},${fontSize},${color},${tsField},${pool},${userHash},${danmuId},[renren]`;
+
         return {
-          cid: Number(meta.contentId) || 0,
-          p: `${meta.timestamp.toFixed(2)},${meta.mode},${meta.color},[renren]`,
+          cid: Number(danmuId) || 0,
+          p: standardP,
           m: text,
-          t: meta.timestamp
+          t: timestamp
         };
       })
-      // 第二步：过滤掉解析失败的 null 项
       .filter(item => item != null);
   }
 

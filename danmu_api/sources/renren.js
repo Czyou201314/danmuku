@@ -534,7 +534,8 @@ export default class RenrenSource extends BaseSource {
 
   /**
    * 格式化弹幕列表为标准模型
-   * 强制构建至少9字段的标准p字符串（8标准字段+来源标签），确保客户端解析不会越界
+   * 模仿代码二（hanjutv）的简单格式：时间,类型,颜色,[renren]
+   * 确保所有字段都有默认值，避免空指针
    */
   formatComments(comments) {
     if (!Array.isArray(comments)) return [];
@@ -542,39 +543,48 @@ export default class RenrenSource extends BaseSource {
     return comments
       .filter(item => item != null)
       .map(item => {
+        // 提取弹幕内容
         const text = String(item.d || item.content || '');
         if (!text) return null;
-        if (!item.p) return null;
 
-        // 解析原始p字段
-        const parts = String(item.p).split(',');
-        
-        // 确保至少有8个字段，缺失补默认值
-        const timestamp = parseFloat(parts[0]) || 0;          // 时间（秒）
-        const mode = parseInt(parts[1]) || 1;                 // 弹幕类型（1=滚动，4=底部，5=顶部）
-        const fontSize = parseInt(parts[2]) || 25;            // 字体大小（默认25）
-        const color = parseInt(parts[3]) || 16777215;         // 颜色（默认白色）
-        
-        // 后续字段（用于弹幕ID生成，不影响显示）
-        const fallbackTs = Math.floor(Date.now() / 1000);     // 当前时间戳作为备用
-        const tsField = parts[4] || fallbackTs;               // 弹幕时间戳
-        const pool = parts[5] || '0';                          // 弹幕池（0普通）
-        const userHash = parts[6] || '0';                      // 用户Hash
-        
-        // 弹幕ID：优先使用原始第7个字段，若不存在则生成一个唯一ID
-        let danmuId = parts[7];
-        if (!danmuId) {
-          danmuId = `${fallbackTs}${Math.floor(Math.random() * 10000)}`;
+        // 从 p 字段解析时间、类型、颜色
+        let timeSec = 0;
+        let mode = 1;      // 默认滚动
+        let color = 16777215; // 默认白色
+
+        if (item.p) {
+          const parts = String(item.p).split(',');
+          // 时间（秒），保留两位小数
+          timeSec = parseFloat(parts[0]) || 0;
+          // 类型（弹幕模式）
+          mode = parseInt(parts[1]) || 1;
+          // 颜色（优先取第4个字段，若不足则取第3个）
+          if (parts.length >= 4) {
+            color = parseInt(parts[3]) || 16777215;
+          } else if (parts.length >= 3) {
+            color = parseInt(parts[2]) || 16777215;
+          }
+        } else if (item.t) {
+          // 如果直接有 t 字段（可能是秒或毫秒）
+          timeSec = parseFloat(item.t) || 0;
         }
 
-        // 构建标准8字段p字符串，并追加来源标签 [renren]（作为第9字段，符合Bilibili扩展格式）
-        const standardP = `${timestamp.toFixed(2)},${mode},${fontSize},${color},${tsField},${pool},${userHash},${danmuId},[renren]`;
+        // 如果时间戳看起来像毫秒（大于 1e10），转为秒
+        if (timeSec > 1e10) {
+          timeSec = timeSec / 1000;
+        }
+
+        // 构建 p 字符串：时间,类型,颜色,[renren]
+        const p = `${timeSec.toFixed(2)},${mode},${color},[renren]`;
+
+        // 生成 cid（尽量使用原始弹幕 ID，若没有则用时间+随机数）
+        const cid = Number(item.did || item.id || 0) || Math.floor(Math.random() * 1000000);
 
         return {
-          cid: Number(danmuId) || 0,
-          p: standardP,
+          cid: cid,
+          p: p,
           m: text,
-          t: timestamp
+          t: timeSec
         };
       })
       .filter(item => item != null);
